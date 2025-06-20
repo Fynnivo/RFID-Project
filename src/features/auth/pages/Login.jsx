@@ -19,6 +19,7 @@ const LoginPage = () => {
       const response = await login({ email, password });
       localStorage.setItem('authToken', response.token);
       toast.success('Login berhasil!');
+      window.location.reload();
     } catch (error) {
       if (error.type === 'validation') {
         setErrors(error.errors);

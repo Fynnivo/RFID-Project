@@ -20,7 +20,7 @@ const Sidebar = () => {
 
   // User details
   const user = {
-    name: 'Exlar Ansari',
+    name: '',
     avatar: 'path-to-avatar-image.jpg' // Replace with the actual path to the avatar image
   };
 
