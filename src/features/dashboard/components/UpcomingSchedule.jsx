@@ -11,7 +11,7 @@ const UpcomingSchedule = ({ data }) => {
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Upcoming Schedule</h3>
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">Jadwal yang Akan Datang</h3>
       <div className="space-y-4">
         {data.map((item, index) => (
           <div 

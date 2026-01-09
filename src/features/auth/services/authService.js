@@ -15,7 +15,7 @@ const loginSchema = z.object({
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-export const login = async ({ email, password }) => {
+const login = async ({ email, password }) => {
   try {
     const validatedData = loginSchema.parse({ email, password });
 
@@ -28,6 +28,11 @@ export const login = async ({ email, password }) => {
         withCredentials: true,
       },
     );
+
+    // Simpan token ke localStorage
+    if (response.data?.token) {
+      localStorage.setItem('authToken', response.data.token);
+    }
 
     return response.data;
   } catch (error) {
@@ -47,3 +52,38 @@ export const login = async ({ email, password }) => {
   }
 };
 
+const logout = async () => {
+  try {
+    await axios.post(
+      `${API_BASE_URL}/api/auth/logout`,
+      {},
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+        withCredentials: true,
+      }
+    );
+  } catch (error) {
+    // Optional: handle error
+  } finally {
+    localStorage.removeItem('authToken');
+  }
+};
+
+// Ambil user dari token di localStorage
+const getUser = () => {
+  const token = localStorage.getItem('authToken');
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.user || null;
+  } catch {
+    return null;
+  }
+};
+
+export const authService = {
+  login,
+  logout,
+  getUser,
+};

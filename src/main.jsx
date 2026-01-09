@@ -6,7 +6,7 @@ import './styles/index.css'  // ← Import main CSS file
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Toaster position='top-center' reverseOrder={false} />
+    <Toaster />
     <App />
   </React.StrictMode>,
 )

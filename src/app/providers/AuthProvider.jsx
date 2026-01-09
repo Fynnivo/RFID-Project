@@ -1,14 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
 
-const AuthContext = createContext();
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -20,7 +12,16 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('authToken');
       if (token) {
         setIsAuthenticated(true);
+        // Ambil user dari token JWT
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          if (payload.user) {
+            setUser(payload.user);
+          }
+        } catch {
+          setUser(null);
         }
+      }
       setLoading(false);
     };
 
@@ -32,6 +33,14 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(true);
     if (userData) {
       setUser(userData);
+    } else {
+      // fallback: ambil user dari token jika userData tidak ada
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.user) setUser(payload.user);
+      } catch {
+        setUser(null);
+      }
     }
   };
 
@@ -46,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     user,
     login,
     logout,
-    loading
+    loading,
   };
 
   return (

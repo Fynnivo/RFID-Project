@@ -1,14 +1,43 @@
-// src/features/dashboard/components/AttendanceTable.jsx
-import React from 'react';
 import toast from 'react-hot-toast';
+import { getScheduleById } from '../services/scheduleService';
+import { useState, useEffect } from 'react';
 
 const AttendanceTable = ({ data = [], loading = false }) => {
   const handleRowClick = (attendance) => {
     toast.info(`Viewing details for ${attendance.name}`);
   };
 
+  const [scheduleMap, setScheduleMap] = useState({});
+
+  useEffect(() => {
+  const uniqueScheduleIds = [...new Set(data.map(item => item.schedule))].filter(Boolean);
+
+  async function fetchSchedules() {
+    const newMap = {};
+
+    for (const id of uniqueScheduleIds) {
+      if (!scheduleMap[id]) {
+        try {
+          const schedule = await getScheduleById(id);
+          newMap[id] = schedule.className || 'Unnamed Schedule';
+        } catch (error) {
+          console.error('Error fetching schedule:', id, error);
+          newMap[id] = 'Unknown Schedule';
+        }
+      }
+    }
+
+    if (Object.keys(newMap).length > 0) {
+      setScheduleMap(prev => ({ ...prev, ...newMap }));
+    }
+  }
+
+  fetchSchedules();
+}, [data]);
+
+
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
+    switch ((status || '').toLowerCase()) {
       case 'present':
         return 'bg-blue-100 text-blue-800';
       case 'absent':
@@ -17,6 +46,8 @@ const AttendanceTable = ({ data = [], loading = false }) => {
         return 'bg-yellow-100 text-yellow-800';
       case 'sick':
         return 'bg-green-100 text-green-800';
+      case 'late':
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -25,8 +56,8 @@ const AttendanceTable = ({ data = [], loading = false }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-6 border-b">
-          <div className="h-6 bg-gray-200 rounded w-40 animate-pulse"></div>
+        <div className="p-6">
+          <h3 className="text-lg font-semibold text-orange-500">Kehadiran Terbaru</h3>
         </div>
         <div className="p-6">
           {[1, 2, 3, 4].map((i) => (
@@ -46,7 +77,7 @@ const AttendanceTable = ({ data = [], loading = false }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm">
       <div className="p-6">
-        <h3 className="text-lg font-semibold text-gray-800">Latest Attendance</h3>
+        <h3 className="text-lg font-semibold text-orange-500">Kehadiran Terbaru</h3>
       </div>
       
       <div className="overflow-x-auto">
@@ -57,16 +88,16 @@ const AttendanceTable = ({ data = [], loading = false }) => {
                 UID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Member Name
+                Nama Member
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Time
+                Waktu
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Schedule Name
+                Nama Jadwal
               </th>
             </tr>
           </thead>
@@ -74,7 +105,7 @@ const AttendanceTable = ({ data = [], loading = false }) => {
           <tbody className="bg-white divide-y divide-gray-200">
             {data.map((attendance, index) => (
               <tr 
-                key={index}
+                key={attendance.id || index}
                 onClick={() => handleRowClick(attendance)}
                 className="hover:bg-gray-50 cursor-pointer transition-colors"
               >
@@ -85,22 +116,22 @@ const AttendanceTable = ({ data = [], loading = false }) => {
                   <div className="flex items-center">
                     <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mr-3 flex items-center justify-center">
                       <span className="text-white text-xs font-semibold">
-                        {attendance.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                        {(attendance.name || '-').split(' ').map(n => n[0]).join('').toUpperCase()}
                       </span>
                     </div>
-                    <span className="text-sm text-gray-900">{attendance.name}</span>
+                    <span className="text-sm text-gray-900">{attendance.name || '-'}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {attendance.time}
+                  {attendance.time || '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(attendance.status)}`}>
-                    {attendance.status}
+                    {attendance.status || '-'}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {attendance.schedule}
+                  {scheduleMap[attendance.schedule] || '-'}
                 </td>
               </tr>
             ))}
@@ -109,7 +140,7 @@ const AttendanceTable = ({ data = [], loading = false }) => {
         
         {data.length === 0 && !loading && (
           <div className="text-center py-8 text-gray-500">
-            No attendance data available
+            Tidak ada jadwal yang tersedia
           </div>
         )}
       </div>
