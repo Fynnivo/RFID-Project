@@ -1,6 +1,6 @@
 import { useAttendance } from '../hooks/useAttendance';
 import { useDashboardData } from '../../dashboard/hooks/useDashboardData';
-import { Card } from '@/shared/components/ui/Card';
+import { Card } from '@/shared/components/ui/card';
 import { TrendingUp, Users, Loader2, AlertCircle } from 'lucide-react';
 import { useEffect } from 'react';
 
