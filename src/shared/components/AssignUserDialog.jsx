@@ -8,7 +8,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { Button } from '@/shared/components/ui/button';
 import { Search, Loader2 } from 'lucide-react';
-import { ScheduleUserService } from '@/features/attendance/services/ScheduleUserService'
+import { ScheduleUserService } from '@/features/attendance/services/scheduleUserService'
 
 export const AssignUserDialog = ({
   open,
