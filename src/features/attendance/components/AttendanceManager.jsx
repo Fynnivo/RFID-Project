@@ -19,7 +19,7 @@ import {
   Activity,
   AlertCircle
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { format, parseISO, isBefore, isAfter } from 'date-fns';
 
 export const AttendanceManager = ({ scheduleId, selectedDate, setSelectedDate }) => {
@@ -47,12 +47,60 @@ export const AttendanceManager = ({ scheduleId, selectedDate, setSelectedDate })
   const lastUser = last ? last.user?.username : '-';
   const lastStatus = last ? last.status : '-';
 
+  // Helper to extract time from ISO string
+  const extractTime = (isoString) => {
+    if (!isoString) return null;
+    try {
+      const timeMatch = isoString.match(/T(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        const [_, hours, minutes] = timeMatch;
+        return { hours: parseInt(hours), minutes: parseInt(minutes) };
+      }
+      return null;
+    } catch (e) {
+      console.error('Error extracting time:', e);
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (!data?.schedule) return;
+    
     const checkStatus = () => {
       const now = new Date();
-      const startTime = parseISO(data.schedule.startTime);
-      const endTime = parseISO(data.schedule.endTime);
+      
+      // Get schedule date
+      const scheduleDate = new Date(data.schedule.scheduleDate);
+      scheduleDate.setHours(0, 0, 0, 0);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // If schedule is not today, determine if it's past or future
+      if (scheduleDate < today) {
+        setClassStatus('COMPLETED');
+        return;
+      } else if (scheduleDate > today) {
+        setClassStatus('NOT_STARTED');
+        return;
+      }
+      
+      // Schedule is today, check time
+      const startTimeData = extractTime(data.schedule.startTime);
+      const endTimeData = extractTime(data.schedule.endTime);
+      
+      if (!startTimeData || !endTimeData) {
+        setClassStatus('NOT_STARTED');
+        return;
+      }
+      
+      // Create datetime objects for today with the schedule times
+      const startTime = new Date();
+      startTime.setHours(startTimeData.hours, startTimeData.minutes, 0, 0);
+      
+      const endTime = new Date();
+      endTime.setHours(endTimeData.hours, endTimeData.minutes, 0, 0);
+      
       if (isBefore(now, startTime)) {
         setClassStatus('NOT_STARTED');
       } else if (isAfter(now, endTime)) {
@@ -61,6 +109,7 @@ export const AttendanceManager = ({ scheduleId, selectedDate, setSelectedDate })
         setClassStatus('IN_PROGRESS');
       }
     };
+    
     checkStatus();
     const interval = setInterval(checkStatus, 60000);
     return () => clearInterval(interval);
@@ -125,13 +174,26 @@ export const AttendanceManager = ({ scheduleId, selectedDate, setSelectedDate })
 
   const getDateLabel = (dateString) => {
     if (!dateString) return '';
-    const date = parseISO(dateString);
-    return format(date, 'EEEE, dd MMMM yyyy');
+    try {
+      const date = parseISO(dateString);
+      return format(date, 'EEEE, dd MMMM yyyy');
+    } catch (e) {
+      return '';
+    }
   };
 
   const getTimeRange = (startTime, endTime) => {
     if (!startTime || !endTime) return '';
-    return `${format(parseISO(startTime), 'HH:mm')} - ${format(parseISO(endTime), 'HH:mm')}`;
+    
+    const startData = extractTime(startTime);
+    const endData = extractTime(endTime);
+    
+    if (!startData || !endData) return '';
+    
+    const formatTimeData = (data) => 
+      `${data.hours.toString().padStart(2, '0')}:${data.minutes.toString().padStart(2, '0')}`;
+    
+    return `${formatTimeData(startData)} - ${formatTimeData(endData)}`;
   };
 
   // --- Loading State ---
@@ -254,7 +316,7 @@ export const AttendanceManager = ({ scheduleId, selectedDate, setSelectedDate })
                   Tanggal Kelas
                 </p>
                 <p className="font-semibold text-gray-900">
-                  {data.schedule?.startTime ? getDateLabel(data.schedule.startTime) : '-'}
+                  {data.schedule?.scheduleDate ? getDateLabel(data.schedule.scheduleDate) : '-'}
                 </p>
               </div>
             </div>
