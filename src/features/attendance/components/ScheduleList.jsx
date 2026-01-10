@@ -12,11 +12,11 @@ import {
   BookOpen,
   RefreshCw,
   GraduationCap,
-  Search, // Tambahkan import
-  ListFilter, // Tambahkan ikon untuk trigger
+  Search,
+  ListFilter,
 } from 'lucide-react';
-import { format, parseISO, isToday, isTomorrow, isYesterday } from 'date-fns';
-// --- Tambahkan import untuk Dialog dan komponen terkait ---
+import { format, parseISO, isToday, isTomorrow, isYesterday, isPast, isFuture } from 'date-fns';
+import { id as localeId } from 'date-fns/locale';
 import {
   Dialog,
   DialogContent,
@@ -24,17 +24,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/shared/components/ui/dialog';
-import { ScrollArea } from '@/shared/components/ui/scroll-area'; // Untuk scrolling
-import { Input } from '@/shared/components/ui/input'; // Untuk input pencarian
-import { Separator } from '@/shared/components/ui/separator.jsx'; // Untuk pemisah
+import { ScrollArea } from '@/shared/components/ui/scroll-area';
+import { Input } from '@/shared/components/ui/input';
+import { Separator } from '@/shared/components/ui/separator.jsx';
 
 export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
-  // --- State baru untuk Dialog ---
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // --- State untuk pencarian ---
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -50,10 +48,9 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
       if (result.success) {
         // Sort schedules by date (newest first)
         const sortedSchedules = result.schedules.sort((a, b) =>
-          new Date(b.startTime) - new Date(a.startTime)
+          new Date(b.scheduleDate) - new Date(a.scheduleDate)
         );
         setSchedules(sortedSchedules);
-        // toast.success(`${result.schedules.length} jadwal berhasil dimuat`); // Opsional: hilangkan toast auto-load
       } else {
         toast.error(result.message || 'Gagal memuat data jadwal');
       }
@@ -69,12 +66,11 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
     fetchSchedules();
   }, []);
 
-  // --- Fungsi untuk menangani pemilihan jadwal dari dialog ---
   const handleSelectScheduleFromDialog = (scheduleId) => {
     const selected = schedules.find(s => s.id === scheduleId);
     setSelectedSchedule(scheduleId);
-    setIsDialogOpen(false); // Tutup dialog setelah pilih
-    setSearchQuery(''); // Reset pencarian
+    setIsDialogOpen(false);
+    setSearchQuery('');
     if (onSelect) {
       onSelect(scheduleId);
       toast.success(`Memilih ${selected?.className} - ${selected?.subject}`);
@@ -82,51 +78,140 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
   };
 
   const handleRefresh = () => {
-     setSearchQuery(''); // Reset pencarian saat refresh
-     fetchSchedules();
+    setSearchQuery('');
+    fetchSchedules();
   };
 
+  // Extract time from ISO string (HH:MM format)
+  const extractTime = (isoString) => {
+    if (!isoString) return '';
+    try {
+      const timeMatch = isoString.match(/T(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        return `${timeMatch[1]}:${timeMatch[2]}`;
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Format date in Indonesian
   const getDateLabel = (dateString) => {
     if (!dateString) return '';
-    const date = parseISO(dateString);
-    if (isToday(date)) return 'Hari ini';
-    if (isTomorrow(date)) return 'Besok';
-    if (isYesterday(date)) return 'Kemarin';
-    return format(date, 'EEEE, dd MMM yyyy');
+    try {
+      const date = parseISO(dateString);
+      
+      if (isToday(date)) {
+        return `Hari ini, ${format(date, 'dd MMM yyyy', { locale: localeId })}`;
+      }
+      if (isTomorrow(date)) {
+        return `Besok, ${format(date, 'dd MMM yyyy', { locale: localeId })}`;
+      }
+      if (isYesterday(date)) {
+        return `Kemarin, ${format(date, 'dd MMM yyyy', { locale: localeId })}`;
+      }
+      
+      // Format: Senin, 15 Jan 2025
+      return format(date, 'EEEE, dd MMM yyyy', { locale: localeId });
+    } catch (e) {
+      console.error('Date format error:', e);
+      return dateString;
+    }
   };
 
+  // Short date format for compact display
+  const getShortDateLabel = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const date = parseISO(dateString);
+      
+      if (isToday(date)) return 'Hari ini';
+      if (isTomorrow(date)) return 'Besok';
+      if (isYesterday(date)) return 'Kemarin';
+      
+      return format(date, 'dd MMM yyyy', { locale: localeId });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  // Get time range string
   const getTimeRange = (startTime, endTime) => {
-    if (!startTime || !endTime) return '';
-    return `${format(parseISO(startTime), 'HH:mm')} - ${format(parseISO(endTime), 'HH:mm')}`;
+    const start = extractTime(startTime);
+    const end = extractTime(endTime);
+    
+    if (!start || !end) return '-';
+    return `${start} - ${end}`;
   };
 
-  const getScheduleStatus = (startTime, endTime) => {
-    if (!startTime || !endTime) return { status: 'unknown', variant: 'secondary' };
-    const now = new Date();
-    const start = parseISO(startTime);
-    const end = parseISO(endTime);
-    if (now < start) {
-      return { status: 'upcoming', variant: 'default', label: 'Akan Datang' };
-    } else if (now >= start && now <= end) {
-      return { status: 'ongoing', variant: 'destructive', label: 'Berlangsung' };
-    } else {
-      return { status: 'completed', variant: 'secondary', label: 'Selesai' };
+  // Get schedule status with better logic
+  const getScheduleStatus = (scheduleDate, startTime, endTime) => {
+    if (!scheduleDate || !startTime || !endTime) {
+      return { status: 'unknown', variant: 'secondary', label: 'Tidak Diketahui' };
+    }
+
+    try {
+      const now = new Date();
+      const schedDate = parseISO(scheduleDate);
+      
+      // Set schedule date to start of day for comparison
+      schedDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // If different day
+      if (schedDate.getTime() !== today.getTime()) {
+        if (isPast(schedDate)) {
+          return { status: 'past', variant: 'secondary', label: 'Selesai' };
+        } else {
+          return { status: 'upcoming', variant: 'default', label: 'Akan Datang' };
+        }
+      }
+
+      // Same day - check time
+      const startTimeData = extractTime(startTime);
+      const endTimeData = extractTime(endTime);
+      
+      if (!startTimeData || !endTimeData) {
+        return { status: 'unknown', variant: 'secondary', label: 'Tidak Diketahui' };
+      }
+
+      const [startHours, startMinutes] = startTimeData.split(':').map(Number);
+      const [endHours, endMinutes] = endTimeData.split(':').map(Number);
+
+      const startDateTime = new Date();
+      startDateTime.setHours(startHours, startMinutes, 0, 0);
+
+      const endDateTime = new Date();
+      endDateTime.setHours(endHours, endMinutes, 0, 0);
+
+      if (now < startDateTime) {
+        return { status: 'upcoming', variant: 'default', label: 'Akan Datang' };
+      } else if (now >= startDateTime && now <= endDateTime) {
+        return { status: 'ongoing', variant: 'destructive', label: 'Berlangsung' };
+      } else {
+        return { status: 'completed', variant: 'secondary', label: 'Selesai' };
+      }
+    } catch (e) {
+      console.error('Status calculation error:', e);
+      return { status: 'unknown', variant: 'secondary', label: 'Tidak Diketahui' };
     }
   };
 
   const selectedScheduleData = schedules.find(s => s.id === selectedSchedule);
 
-  // --- Filter jadwal berdasarkan query pencarian ---
+  // Filter schedules based on search query
   const filteredSchedules = schedules.filter(schedule =>
     schedule.className.toLowerCase().includes(searchQuery.toLowerCase()) ||
     schedule.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
     schedule.instructor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    getDateLabel(schedule.startTime).toLowerCase().includes(searchQuery.toLowerCase())
+    getDateLabel(schedule.scheduleDate).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
-      {/* Schedule Selector Card - Diubah untuk menggunakan Dialog */}
+      {/* Schedule Selector Card */}
       <Card className="shadow-sm border-0 bg-white">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -145,7 +230,8 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
-              {/* --- Dialog Trigger Button --- */}
+              
+              {/* Dialog Trigger Button */}
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
@@ -155,16 +241,16 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
                     className="h-8 gap-1 border-2 border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300"
                   >
                     <ListFilter className="h-4 w-4" />
-                    {/* <span className="hidden sm:inline">Pilih Jadwal</span> */}
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-                  <DialogHeader className="shrink-0"> {/* Header tidak scroll */}
+                  <DialogHeader className="shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                       <GraduationCap className="h-5 w-5 text-orange-600" />
                       Pilih Jadwal Kelas
                     </DialogTitle>
-                    {/* --- Input Pencarian --- */}
+                    
+                    {/* Search Input */}
                     <div className="relative mt-2">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                       <Input
@@ -175,41 +261,49 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
                       />
                     </div>
                   </DialogHeader>
-                  {/* --- Daftar Jadwal dalam ScrollArea --- */}
-                  <ScrollArea className="flex-grow mt-2"> {/* ScrollArea membungkus list */}
+                  
+                  {/* Schedule List in ScrollArea */}
+                  <ScrollArea className="flex-grow mt-2">
                     {loading ? (
                       <div className="flex items-center justify-center py-10">
                         <Loader2 className="h-6 w-6 animate-spin text-orange-600" />
                         <span className="ml-2 text-gray-600">Memuat jadwal...</span>
                       </div>
                     ) : filteredSchedules.length > 0 ? (
-                      <div className="space-y-2 pb-2"> {/* Tambahkan padding bawah jika perlu */}
+                      <div className="space-y-2 pb-2">
                         {filteredSchedules.map((schedule) => {
-                          const status = getScheduleStatus(schedule.startTime, schedule.endTime);
+                          const status = getScheduleStatus(
+                            schedule.scheduleDate, 
+                            schedule.startTime, 
+                            schedule.endTime
+                          );
                           return (
                             <div
                               key={schedule.id}
-                              // --- Ganti SelectItem dengan div/button yang dapat diklik ---
                               className={`p-4 rounded-lg border cursor-pointer transition-all hover:bg-orange-50 hover:border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-300 ${
                                 selectedSchedule === schedule.id
-                                  ? 'bg-orange-50 border-orange-300 ring-2 ring-orange-100' // Highlight jadwal terpilih
+                                  ? 'bg-orange-50 border-orange-300 ring-2 ring-orange-100'
                                   : 'border-gray-200'
                               }`}
-                              onClick={() => handleSelectScheduleFromDialog(schedule.id)} // Handle click
+                              onClick={() => handleSelectScheduleFromDialog(schedule.id)}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <GraduationCap className="h-5 w-5 text-orange-600 flex-shrink-0" />
-                                  <div>
-                                    <div className="font-medium text-gray-900">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2 flex-1 min-w-0">
+                                  <GraduationCap className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-gray-900 truncate">
                                       {schedule.className}
                                     </div>
-                                    <div className="text-sm text-gray-600 flex items-center gap-1 flex-wrap">
-                                      <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
-                                      <span>{schedule.subject}</span>
-                                      <Separator orientation="vertical" className="h-3.5 mx-1" />
-                                      <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-                                      <span>{getTimeRange(schedule.startTime, schedule.endTime)}</span>
+                                    <div className="text-sm text-gray-600 flex items-center gap-2 flex-wrap mt-1">
+                                      <span className="flex items-center gap-1">
+                                        <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
+                                        {schedule.subject}
+                                      </span>
+                                      <Separator orientation="vertical" className="h-3.5" />
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                                        {getTimeRange(schedule.startTime, schedule.endTime)}
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -217,14 +311,18 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
                                   {status.label}
                                 </Badge>
                               </div>
-                              <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                                <Calendar className="h-3 w-3 flex-shrink-0" />
-                                <span>{getDateLabel(schedule.startTime)}</span>
+                              <div className="mt-2 text-xs text-gray-500 flex items-center gap-2 flex-wrap ml-7">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3 flex-shrink-0" />
+                                  {getShortDateLabel(schedule.scheduleDate)}
+                                </span>
                                 {schedule.instructor && (
                                   <>
-                                    <Separator orientation="vertical" className="h-3 mx-1" />
-                                    <Users className="h-3 w-3 flex-shrink-0" />
-                                    <span>{schedule.instructor}</span>
+                                    <Separator orientation="vertical" className="h-3" />
+                                    <span className="flex items-center gap-1">
+                                      <Users className="h-3 w-3 flex-shrink-0" />
+                                      {schedule.instructor}
+                                    </span>
                                   </>
                                 )}
                               </div>
@@ -233,11 +331,11 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
                         })}
                       </div>
                     ) : (
-                       <div className="flex flex-col items-center justify-center py-10 text-center text-gray-500">
-                         <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                         <p className="font-medium">Jadwal Tidak Ditemukan</p>
-                         <p className="text-sm mt-1">Coba ubah kata kunci pencarian Anda.</p>
-                       </div>
+                      <div className="flex flex-col items-center justify-center py-10 text-center text-gray-500">
+                        <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                        <p className="font-medium">Jadwal Tidak Ditemukan</p>
+                        <p className="text-sm mt-1">Coba ubah kata kunci pencarian Anda.</p>
+                      </div>
                     )}
                   </ScrollArea>
                 </DialogContent>
@@ -246,56 +344,57 @@ export const ScheduleList = ({ onSelect, selectedScheduleId }) => {
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {/* --- Tampilkan Jadwal Terpilih di Bawah Tombol --- */}
+          {/* Display Selected Schedule */}
           {selectedScheduleData ? (
-             <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
-               <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-2">
-                   <GraduationCap className="h-5 w-5 text-orange-600" />
-                   <div>
-                     <div className="font-medium text-gray-900">
-                       {selectedScheduleData.className}
-                     </div>
-                     <div className="text-sm text-gray-600">
-                       {selectedScheduleData.subject} • {getTimeRange(selectedScheduleData.startTime, selectedScheduleData.endTime)}
-                     </div>
-                   </div>
-                 </div>
-                 <Badge
-                   variant={getScheduleStatus(selectedScheduleData.startTime, selectedScheduleData.endTime).variant}
-                   className="text-xs"
-                 >
-                   {getScheduleStatus(selectedScheduleData.startTime, selectedScheduleData.endTime).label}
-                 </Badge>
-               </div>
-               <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                 <Calendar className="h-3 w-3" />
-                 <span>{getDateLabel(selectedScheduleData.startTime)}</span>
-                 {selectedScheduleData.instructor && (
-                   <>
-                     <Separator orientation="vertical" className="h-3 mx-1" />
-                     <Users className="h-3 w-3" />
-                     <span>{selectedScheduleData.instructor}</span>
-                   </>
-                 )}
-               </div>
-             </div>
+            <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <GraduationCap className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-900">
+                      {selectedScheduleData.className}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {selectedScheduleData.subject} • {getTimeRange(selectedScheduleData.startTime, selectedScheduleData.endTime)}
+                    </div>
+                  </div>
+                </div>
+                <Badge
+                  variant={getScheduleStatus(
+                    selectedScheduleData.scheduleDate, 
+                    selectedScheduleData.startTime, 
+                    selectedScheduleData.endTime
+                  ).variant}
+                  className="text-xs flex-shrink-0"
+                >
+                  {getScheduleStatus(
+                    selectedScheduleData.scheduleDate, 
+                    selectedScheduleData.startTime, 
+                    selectedScheduleData.endTime
+                  ).label}
+                </Badge>
+              </div>
+              <div className="mt-2 text-xs text-gray-500 flex items-center gap-2 flex-wrap ml-7">
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3 flex-shrink-0" />
+                  {getDateLabel(selectedScheduleData.scheduleDate)}
+                </span>
+                {selectedScheduleData.instructor && (
+                  <>
+                    <Separator orientation="vertical" className="h-3" />
+                    <span className="flex items-center gap-1">
+                      <Users className="h-3 w-3 flex-shrink-0" />
+                      {selectedScheduleData.instructor}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           ) : (
             <p className="text-sm text-gray-500">Belum ada jadwal yang dipilih.</p>
           )}
         </CardContent>
       </Card>
-
-      {/* Selected Schedule Details - Tetap ada, opsional jika ingin detail terpisah */}
-      {/* Komentar: Bagian ini bisa dihapus jika informasi sudah cukup di card di atas
-      {selectedScheduleData && (
-        <Card className="shadow-sm border-0 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <CardContent className="p-6">
-            ... (konten card detail) ...
-          </CardContent>
-        </Card>
-      )}
-      */}
     </div>
   );
 };
